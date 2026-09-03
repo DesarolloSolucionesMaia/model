@@ -113,3 +113,55 @@ Configuración principal:
 - Máximo de 50.000 características.
 - Regresión logística con `C=2.0`.
 - Semilla reproducible `42`.
+
+## Experimentos con MLflow
+
+Los experimentos utilizan el mismo conjunto estratificado de entrenamiento y prueba para garantizar una comparación justa.
+
+Experimento de MLflow:
+
+```text
+spanish-news-classification
+```
+
+Ejecuciones finales:
+
+| Run | Configuración | Macro F1 | Accuracy | Log loss |
+|---|---|---:|---:|---:|
+| `logistic_regression_baseline` | Unigramas, 30.000 características, C=1.0 | 0.9156 | 0.9146 | 1.0134 |
+| `logistic_regression_improved` | Unigramas y bigramas, 50.000 características, C=2.0 | 0.9221 | 0.9220 | 0.8575 |
+
+La ejecución seleccionada es `logistic_regression_improved`, porque obtuvo mayor Macro F1 y accuracy, y menor log loss.
+
+### Ejecutar los experimentos
+
+```powershell
+python .\src\experiments.py
+```
+
+Cada ejecución registra:
+
+- Parámetros de TF-IDF y regresión logística.
+- Accuracy, precision, recall y F1.
+- Log loss y top-3 accuracy.
+- Tiempos de entrenamiento e inferencia.
+- Reporte de clasificación.
+- Matriz de confusión.
+- Homologación de etiquetas.
+- Revisión del dataset.
+- Commit Git.
+- Modelo con firma y ejemplo de entrada.
+
+### Abrir MLflow localmente
+
+```powershell
+mlflow ui --backend-store-uri "sqlite:///mlflow.db" --port 5000
+```
+
+Interfaz:
+
+```text
+http://127.0.0.1:5000
+```
+
+La base `mlflow.db`, el directorio `mlruns` y los modelos generados son artefactos locales y no se almacenan directamente en Git.
