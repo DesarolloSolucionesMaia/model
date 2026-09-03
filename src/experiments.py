@@ -44,6 +44,12 @@ CONFIGURATIONS = {
         "sublinear_tf": True,
         "c_value": 2.0,
     },
+    "logistic_regression_sebastian": {
+        "ngram_range": (1, 2),
+        "max_features": 80_000,
+        "sublinear_tf": True,
+        "c_value": 3.0,
+    },
 }
 
 
