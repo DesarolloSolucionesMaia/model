@@ -44,6 +44,24 @@ CONFIGURATIONS = {
         "sublinear_tf": True,
         "c_value": 2.0,
     },
+    "logistic_regression_classmates": {
+        "ngram_range": (1, 2),
+        "max_features": 80_000,
+        "sublinear_tf": True,
+        "c_value": 4.0,
+    },
+    "logistic_regression_regularized": {
+        "ngram_range": (1, 2),
+        "max_features": 60_000,
+        "sublinear_tf": True,
+        "c_value": 0.5,
+    },
+    "logistic_regression_trigrams": {
+        "ngram_range": (1, 3),
+        "max_features": 100_000,
+        "sublinear_tf": True,
+        "c_value": 3.0,
+    },
 }
 
 
