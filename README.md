@@ -64,6 +64,18 @@ La validación comprueba:
 - Distribución de las categorías.
 - Longitud de los textos.
 
+## Exploración reproducible
+
+```powershell
+python .\src\explore.py
+```
+
+El proceso genera evidencia para la exploración por cada una de las 12 categorías:
+
+- `reports/data_profile_by_class.csv`: registros, proporción y longitudes por clase.
+- `reports/data_examples.csv`: una noticia representativa por clase.
+- `reports/class_distribution.png`: distribución de las categorías.
+- `reports/text_length_by_class.png`: variabilidad de longitud por categoría.
 ## Entrenamiento
 
 ```powershell
@@ -254,3 +266,11 @@ http://127.0.0.1:5000
 ```
 
 La base `mlflow.db`, el directorio `mlruns` y los modelos generados son artefactos locales y no se almacenan directamente en Git.
+
+## Pruebas automatizadas
+
+```powershell
+python -m pytest -q
+```
+
+Las pruebas cubren la validación del dataset, la configuración y las métricas del entrenamiento, la generación de reportes y los casos principales de predicción.
