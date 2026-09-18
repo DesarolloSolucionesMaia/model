@@ -1,7 +1,12 @@
-﻿anyio==4.14.1
+anyio==4.14.1
+fastapi==0.135.1
 joblib==1.6.0
 matplotlib==3.11.1
 mlflow==3.15.2
 pandas==2.3.3
 pyarrow==25.0.1
+pydantic==2.12.5
+pypdf==6.8.0
+python-multipart==0.0.22
 scikit-learn==1.9.0
+uvicorn[standard]==0.41.0

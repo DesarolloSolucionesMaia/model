@@ -95,6 +95,95 @@ La salida contiene:
 - Confianza.
 - Tres categorías más probables.
 
+## API de inferencia
+
+La API FastAPI carga el artefacto una sola vez al iniciar y expone:
+
+| Método | Ruta | Uso |
+|---|---|---|
+| `GET` | `/health` | Verificar que el servicio está disponible. |
+| `GET` | `/v1/model` | Consultar versión, métricas y metadatos del modelo. |
+| `GET` | `/v1/categories` | Listar las 12 categorías para construir filtros del tablero. |
+| `GET` | `/v1/predictions?limit=20&offset=0` | Consultar el historial paginado, del más reciente al más antiguo. |
+| `GET` | `/v1/predictions/{prediction_id}` | Consultar el detalle de una predicción guardada. |
+| `DELETE` | `/v1/predictions/{prediction_id}` | Eliminar una predicción del historial. |
+| `POST` | `/v1/predictions` | Clasificar un texto. |
+| `POST` | `/v1/predictions/batch` | Clasificar hasta 50 textos en una petición. |
+| `POST` | `/v1/predictions/pdf` | Extraer el texto de un PDF de hasta 20 MB y clasificarlo. |
+
+Cada predicción se almacena en SQLite y devuelve `prediction_id`,
+`created_at`, `source_type` y, para PDFs, `file_name`. Por privacidad, la
+base no almacena el texto ni el contenido del documento. El historial conserva
+el resultado, top 3, versión temporal del modelo y un hash no reversible del
+PDF. La ruta se puede configurar mediante `DATABASE_PATH`.
+
+Ejecución sin Docker:
+
+```powershell
+uvicorn src.api:app --reload --host 0.0.0.0 --port 8000
+```
+
+Documentación interactiva:
+
+```text
+http://localhost:8000/docs
+```
+
+Ejemplo por texto:
+
+```powershell
+Invoke-RestMethod -Method Post `
+  -Uri http://localhost:8000/v1/predictions `
+  -ContentType 'application/json' `
+  -Body '{"text":"El equipo ganó la final con dos goles."}'
+```
+
+## Ejecución local con Docker
+
+Requisitos: Docker Desktop iniciado y el archivo
+`artifacts/spanish_news_classifier.joblib` presente.
+
+Docker Compose crea el volumen `prediction-data`, por lo que el historial se
+conserva aunque el contenedor sea recreado. `docker compose down` no elimina
+este volumen; `docker compose down -v` sí lo elimina.
+
+1. Ubicarse en el repositorio del modelo:
+
+   ```powershell
+   cd Repo\model
+   ```
+
+2. Construir e iniciar el contenedor:
+
+   ```powershell
+   docker compose up --build -d
+   ```
+
+3. Verificar la salud y abrir la documentación:
+
+   ```powershell
+   Invoke-RestMethod http://localhost:8000/health
+   Start-Process http://localhost:8000/docs
+   ```
+
+4. Probar un PDF (PowerShell 7):
+
+   ```powershell
+   curl.exe -X POST http://localhost:8000/v1/predictions/pdf `
+     -H "accept: application/json" `
+     -F "file=@C:\ruta\noticia.pdf;type=application/pdf"
+   ```
+
+5. Consultar registros o detener el servicio:
+
+   ```powershell
+   docker compose logs -f api
+   docker compose down
+   ```
+
+El origen del tablero se configura con `CORS_ORIGINS` en `compose.yaml`.
+Para producción se debe reemplazar por el dominio real del frontend.
+
 ## Resultados de la primera versión
 
 | Métrica | Resultado |

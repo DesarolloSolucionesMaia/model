@@ -1,4 +1,5 @@
 import argparse
+from functools import lru_cache
 from pathlib import Path
 
 import joblib
@@ -12,6 +13,7 @@ DEFAULT_MODEL_PATH = (
 )
 
 
+@lru_cache(maxsize=4)
 def load_model_bundle(model_path: Path = DEFAULT_MODEL_PATH) -> dict:
     """Carga y valida el paquete del modelo."""
 

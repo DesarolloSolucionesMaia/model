@@ -2,7 +2,9 @@
 __pycache__/
 *.py[cod]
 .pytest_cache/
-artifacts/
+artifacts/*
+!artifacts/spanish_news_classifier.joblib
 mlruns/
 .env
 mlflow.db
+data/
