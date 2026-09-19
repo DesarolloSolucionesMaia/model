@@ -54,14 +54,14 @@ def build_pipeline() -> Pipeline:
                     ngram_range=(1, 2),
                     min_df=2,
                     max_df=0.95,
-                    max_features=50_000,
+                    max_features=80_000,
                     sublinear_tf=True,
                 ),
             ),
             (
                 "classifier",
                 LogisticRegression(
-                    C=2.0,
+                    C=3.0,
                     max_iter=1_000,
                     random_state=RANDOM_STATE,
                 ),
