@@ -21,7 +21,7 @@ from src.prediction_history import (
 
 
 API_VERSION = "1.0.0"
-MAX_PDF_BYTES = 20 * 1024 * 1024
+MAX_PDF_BYTES = 50 * 1024 * 1024
 MODEL_PATH = Path(os.getenv("MODEL_PATH", str(DEFAULT_MODEL_PATH)))
 
 
@@ -200,7 +200,7 @@ def predict_batch(request: BatchPredictionRequest) -> list[PredictionResponse]:
 
 @app.post("/v1/predictions/pdf", response_model=PredictionResponse, tags=["predicción"])
 async def predict_pdf(
-    file: Annotated[UploadFile, File(description="Documento PDF de máximo 20 MB")],
+    file: Annotated[UploadFile, File(description="Documento PDF de máximo 50 MB")],
 ) -> PredictionResponse:
     if file.content_type != "application/pdf":
         raise HTTPException(
@@ -212,7 +212,7 @@ async def predict_pdf(
     if len(content) > MAX_PDF_BYTES:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail="El PDF supera el límite de 20 MB.",
+            detail="El PDF supera el límite de 50 MB.",
         )
 
     try:
