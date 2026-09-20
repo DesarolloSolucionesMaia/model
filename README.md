@@ -196,23 +196,23 @@ este volumen; `docker compose down -v` sí lo elimina.
 El origen del tablero se configura con `CORS_ORIGINS` en `compose.yaml`.
 Para producción se debe reemplazar por el dominio real del frontend.
 
-## Resultados de la primera versión
+## Resultados del modelo seleccionado
 
 | Métrica | Resultado |
 |---|---:|
-| Accuracy | 0.9220 |
-| Macro precision | 0.9263 |
-| Macro recall | 0.9223 |
-| Macro F1 | 0.9221 |
-| Weighted F1 | 0.9220 |
-| Log loss | 0.8575 |
+| Accuracy | 0.9268 |
+| Macro precision | 0.9305 |
+| Macro recall | 0.9270 |
+| Macro F1 | 0.9273 |
+| Weighted F1 | 0.9273 |
+| Log loss | 0.7837 |
 | Top-3 accuracy | 0.9878 |
 
 Configuración principal:
 
 - TF-IDF con unigramas y bigramas.
-- Máximo de 50.000 características.
-- Regresión logística con `C=2.0`.
+- Máximo de 80.000 características.
+- Regresión logística con `C=3.0`.
 - Semilla reproducible `42`.
 
 ## Experimentos con MLflow
@@ -231,8 +231,10 @@ Ejecuciones finales:
 |---|---|---:|---:|---:|
 | `logistic_regression_baseline` | Unigramas, 30.000 características, C=1.0 | 0.9156 | 0.9146 | 1.0134 |
 | `logistic_regression_improved` | Unigramas y bigramas, 50.000 características, C=2.0 | 0.9221 | 0.9220 | 0.8575 |
+| `selected_80k_c3` | Unigramas y bigramas, 80.000 características, C=3.0 | 0.9273 | 0.9268 | 0.7837 |
 
-La ejecución seleccionada es `logistic_regression_improved`, porque obtuvo mayor Macro F1 y accuracy, y menor log loss.
+El artefacto desplegado usa la configuración `selected_80k_c3`, porque obtuvo
+mayor Macro F1 y accuracy, y menor log loss que las versiones anteriores.
 
 ### Ejecutar los experimentos
 

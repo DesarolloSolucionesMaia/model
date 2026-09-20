@@ -10,8 +10,8 @@ def test_build_pipeline_has_expected_configuration():
     pipeline = build_pipeline()
 
     assert pipeline.named_steps["tfidf"].ngram_range == (1, 2)
-    assert pipeline.named_steps["tfidf"].max_features == 50_000
-    assert pipeline.named_steps["classifier"].C == 2.0
+    assert pipeline.named_steps["tfidf"].max_features == 80_000
+    assert pipeline.named_steps["classifier"].C == 3.0
     assert pipeline.named_steps["classifier"].random_state == 42
 
 
