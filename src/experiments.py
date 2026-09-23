@@ -13,14 +13,21 @@ import mlflow
 import mlflow.sklearn
 import pandas as pd
 from mlflow.models import infer_signature
+from sklearn.calibration import CalibratedClassifierCV
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import (
     ConfusionMatrixDisplay,
     classification_report,
 )
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import (
+    StratifiedKFold,
+    cross_val_score,
+    train_test_split,
+)
+from sklearn.naive_bayes import ComplementNB
 from sklearn.pipeline import Pipeline
+from sklearn.svm import LinearSVC
 
 from data_validation import LABEL_NAMES, load_and_validate_data
 from train import RANDOM_STATE, TEST_SIZE, calculate_metrics
@@ -31,18 +38,50 @@ LOCAL_MLFLOW_DB = PROJECT_ROOT / "mlflow.db"
 EXPERIMENT_NAME = "spanish-news-classification"
 DATASET_REVISION = "9f568e396857395bd803c63452b83316124d31c9"
 
+# Número de particiones de la validación cruzada. Una única división 80/20 no
+# permite ordenar configuraciones cuyas diferencias son del orden del ruido de
+# muestreo (~0,007 en F1 macro, unos 3 documentos sobre 410).
+CV_FOLDS = 5
+
 CONFIGURATIONS = {
     "logistic_regression_baseline": {
+        "family": "logistic_regression",
         "ngram_range": (1, 1),
         "max_features": 30_000,
         "sublinear_tf": False,
         "c_value": 1.0,
     },
     "logistic_regression_improved": {
+        "family": "logistic_regression",
         "ngram_range": (1, 2),
         "max_features": 50_000,
         "sublinear_tf": True,
         "c_value": 2.0,
+    },
+    # Configuración equivalente a la desplegada en la API (ver src/train.py).
+    "logistic_regression_deployed": {
+        "family": "logistic_regression",
+        "ngram_range": (1, 2),
+        "max_features": 80_000,
+        "sublinear_tf": True,
+        "c_value": 3.0,
+    },
+    # Familias alternativas: la comparación entre configuraciones de un mismo
+    # algoritmo es ajuste de hiperparámetros, no comparación de modelos, y no
+    # responde si el techo cercano a 0,93 lo impone el enfoque o el clasificador.
+    "complement_naive_bayes": {
+        "family": "complement_naive_bayes",
+        "ngram_range": (1, 2),
+        "max_features": 80_000,
+        "sublinear_tf": True,
+        "alpha": 0.3,
+    },
+    "linear_svm_calibrated": {
+        "family": "linear_svm",
+        "ngram_range": (1, 2),
+        "max_features": 80_000,
+        "sublinear_tf": True,
+        "c_value": 1.0,
     },
 }
 
@@ -64,6 +103,40 @@ def get_git_commit() -> str:
     return result.stdout.strip()
 
 
+def build_classifier(configuration: dict):
+    """Construye el clasificador correspondiente a la familia configurada.
+
+    Todas las familias exponen `predict_proba`, requisito para calcular la
+    pérdida logarítmica y la exactitud top-3, y para que la API pueda mostrar
+    la confianza en el tablero. `LinearSVC` no la expone de forma nativa, así
+    que se envuelve en una calibración que deriva probabilidades del margen.
+    """
+
+    family = configuration["family"]
+
+    if family == "logistic_regression":
+        return LogisticRegression(
+            C=configuration["c_value"],
+            max_iter=1_000,
+            random_state=RANDOM_STATE,
+        )
+
+    if family == "complement_naive_bayes":
+        return ComplementNB(alpha=configuration["alpha"])
+
+    if family == "linear_svm":
+        return CalibratedClassifierCV(
+            estimator=LinearSVC(
+                C=configuration["c_value"],
+                random_state=RANDOM_STATE,
+            ),
+            method="sigmoid",
+            cv=CV_FOLDS,
+        )
+
+    raise ValueError(f"Familia de modelo desconocida: {family}")
+
+
 def build_experiment_pipeline(configuration: dict) -> Pipeline:
     """Construye el modelo usando la configuración recibida."""
 
@@ -81,16 +154,64 @@ def build_experiment_pipeline(configuration: dict) -> Pipeline:
                     sublinear_tf=configuration["sublinear_tf"],
                 ),
             ),
-            (
-                "classifier",
-                LogisticRegression(
-                    C=configuration["c_value"],
-                    max_iter=1_000,
-                    random_state=RANDOM_STATE,
-                ),
-            ),
+            ("classifier", build_classifier(configuration)),
         ]
     )
+
+
+def build_logged_params(configuration: dict) -> dict:
+    """Arma los parámetros a registrar, propios de cada familia."""
+
+    params = {
+        "model_family": configuration["family"],
+        "tfidf_ngram_min": configuration["ngram_range"][0],
+        "tfidf_ngram_max": configuration["ngram_range"][1],
+        "tfidf_max_features": configuration["max_features"],
+        "tfidf_min_df": 2,
+        "tfidf_max_df": 0.95,
+        "tfidf_sublinear_tf": configuration["sublinear_tf"],
+        "random_state": RANDOM_STATE,
+        "test_size": TEST_SIZE,
+        "cv_folds": CV_FOLDS,
+    }
+
+    if configuration["family"] == "logistic_regression":
+        params["logistic_regression_c"] = configuration["c_value"]
+        params["logistic_regression_max_iter"] = 1_000
+    elif configuration["family"] == "complement_naive_bayes":
+        params["complement_nb_alpha"] = configuration["alpha"]
+    elif configuration["family"] == "linear_svm":
+        params["linear_svc_c"] = configuration["c_value"]
+        params["calibration_method"] = "sigmoid"
+
+    return params
+
+
+def cross_validate_model(configuration: dict, data: pd.DataFrame) -> dict:
+    """Evalúa la configuración con validación cruzada estratificada.
+
+    Devuelve media y desviación estándar del F1 macro. La desviación es lo que
+    permite juzgar si una diferencia entre modelos es real o cabe dentro de la
+    variabilidad del muestreo.
+    """
+
+    scores = cross_val_score(
+        build_experiment_pipeline(configuration),
+        data["text"],
+        data["label"],
+        cv=StratifiedKFold(
+            n_splits=CV_FOLDS,
+            shuffle=True,
+            random_state=RANDOM_STATE,
+        ),
+        scoring="f1_macro",
+    )
+
+    return {
+        "cv_macro_f1_mean": float(np.mean(scores)),
+        "cv_macro_f1_std": float(np.std(scores)),
+        "cv_fold_scores": [float(score) for score in scores],
+    }
 
 
 def log_evaluation_artifacts(y_true, predictions) -> None:
@@ -142,6 +263,7 @@ def run_experiment(
     configuration: dict,
     train_data: pd.DataFrame,
     test_data: pd.DataFrame,
+    full_data: pd.DataFrame,
 ) -> dict:
     """Entrena una configuración y registra sus resultados en MLflow."""
 
@@ -150,7 +272,7 @@ def run_experiment(
     with mlflow.start_run(run_name=run_name) as active_run:
         mlflow.set_tags(
             {
-                "model_family": "logistic_regression",
+                "model_family": configuration["family"],
                 "problem_type": "multiclass_text_classification",
                 "dataset": "mteb/SpanishNewsClassification",
                 "dataset_revision": DATASET_REVISION,
@@ -158,21 +280,24 @@ def run_experiment(
             }
         )
 
-        mlflow.log_params(
+        params = build_logged_params(configuration)
+        params["train_records"] = len(train_data)
+        params["test_records"] = len(test_data)
+
+        mlflow.log_params(params)
+
+        cv_results = cross_validate_model(configuration, full_data)
+
+        mlflow.log_metrics(
             {
-                "tfidf_ngram_min": configuration["ngram_range"][0],
-                "tfidf_ngram_max": configuration["ngram_range"][1],
-                "tfidf_max_features": configuration["max_features"],
-                "tfidf_min_df": 2,
-                "tfidf_max_df": 0.95,
-                "tfidf_sublinear_tf": configuration["sublinear_tf"],
-                "logistic_regression_c": configuration["c_value"],
-                "logistic_regression_max_iter": 1_000,
-                "random_state": RANDOM_STATE,
-                "test_size": TEST_SIZE,
-                "train_records": len(train_data),
-                "test_records": len(test_data),
+                "cv_macro_f1_mean": cv_results["cv_macro_f1_mean"],
+                "cv_macro_f1_std": cv_results["cv_macro_f1_std"],
             }
+        )
+
+        mlflow.log_dict(
+            cv_results,
+            "evaluation/cross_validation.json",
         )
 
         start_time = time.perf_counter()
@@ -234,6 +359,9 @@ def run_experiment(
         return {
             "run_id": active_run.info.run_id,
             "run_name": run_name,
+            "model_family": configuration["family"],
+            "cv_macro_f1_mean": cv_results["cv_macro_f1_mean"],
+            "cv_macro_f1_std": cv_results["cv_macro_f1_std"],
             **metrics,
         }
 
@@ -266,17 +394,21 @@ def main() -> None:
             configuration,
             train_data,
             test_data,
+            data,
         )
 
         results.append(result)
 
         print(
+            f"CV Macro F1: {result['cv_macro_f1_mean']:.4f} "
+            f"+/- {result['cv_macro_f1_std']:.4f} | "
             f"Macro F1: {result['macro_f1']:.4f} | "
-            f"Accuracy: {result['accuracy']:.4f}"
+            f"Accuracy: {result['accuracy']:.4f} | "
+            f"Log loss: {result['log_loss']:.4f}"
         )
 
     comparison = pd.DataFrame(results).sort_values(
-        by="macro_f1",
+        by="cv_macro_f1_mean",
         ascending=False,
     )
 
@@ -285,10 +417,12 @@ def main() -> None:
         comparison[
             [
                 "run_name",
+                "model_family",
+                "cv_macro_f1_mean",
+                "cv_macro_f1_std",
                 "macro_f1",
                 "accuracy",
                 "log_loss",
-                "training_time_seconds",
             ]
         ].to_string(index=False)
     )
@@ -296,8 +430,29 @@ def main() -> None:
     best_run = comparison.iloc[0]
 
     print(
-        f"\nMejor ejecución: {best_run['run_name']} "
-        f"con Macro F1={best_run['macro_f1']:.4f}"
+        f"\nMejor ejecución por F1 macro en validación cruzada: "
+        f"{best_run['run_name']} con "
+        f"{best_run['cv_macro_f1_mean']:.4f} "
+        f"+/- {best_run['cv_macro_f1_std']:.4f}"
+    )
+
+    # Una diferencia menor que la desviación estándar de la validación cruzada
+    # no permite declarar un ganador: es ruido de muestreo, no mejora.
+    margin = best_run["cv_macro_f1_mean"] - comparison.iloc[1]["cv_macro_f1_mean"]
+
+    if margin < best_run["cv_macro_f1_std"]:
+        print(
+            f"Aviso: la ventaja sobre la segunda ({margin:.4f}) es menor que "
+            f"la desviación estándar ({best_run['cv_macro_f1_std']:.4f}); "
+            f"las dos son estadísticamente indistinguibles."
+        )
+
+    best_by_log_loss = comparison.sort_values(by="log_loss").iloc[0]
+
+    print(
+        f"Mejor calibración (menor pérdida logarítmica): "
+        f"{best_by_log_loss['run_name']} con "
+        f"{best_by_log_loss['log_loss']:.4f}"
     )
     print(f"Tracking URI: {mlflow.get_tracking_uri()}")
 
