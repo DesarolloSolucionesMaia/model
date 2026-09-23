@@ -1,0 +1,11 @@
+categoria_real,categoria_predicha,casos
+Motor,Deportes,3
+Política,Economía,3
+Religión,Política,3
+Motor,Economía,2
+Entretenimiento,Religión,2
+Alimentación,Economía,1
+Alimentación,Entretenimiento,1
+Alimentación,Tecnología,1
+Astronomía,Defensa,1
+Astronomía,Religión,1

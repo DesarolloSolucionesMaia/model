@@ -1,0 +1,15 @@
+{
+  "cv_macro_f1_mean": 0.927532,
+  "cv_macro_f1_std": 0.007023,
+  "holdout_accuracy": 0.904878,
+  "holdout_macro_f1": 0.904545,
+  "holdout_log_loss": 0.675723,
+  "holdout_top_3_accuracy": 0.982927,
+  "cv_fold_scores": [
+    0.921078,
+    0.935068,
+    0.92682,
+    0.918756,
+    0.935938
+  ]
+}
